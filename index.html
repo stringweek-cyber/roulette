@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+<title>마블 룰렛</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: full-bleed arcade cabinet canvas; controls float as a console deck bottom-left, standings ticker top-right, course map top-left */
+:root{
+  --ink:#06080f; --lane:#0d1322; --deck:#111726; --deck-2:#1a2236; --line:#2a3550;
+  --text:#e8ecf6; --muted:#8b95ad; --cyan:#40efe3; --amber:#ffc93c; --pink:#ff5aa5;
+  --f-display:"Black Han Sans","IBM Plex Sans KR",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans KR",system-ui,-apple-system,"Malgun Gothic",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;background:var(--ink);color:var(--text);font-family:var(--f-body);overflow:hidden}
+#stage{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+.panel{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(430px,calc(100vw - 32px));
+  background:color-mix(in srgb,var(--deck) 92%,transparent);border:1px solid var(--line);border-radius:14px;padding:14px;
+  display:flex;flex-direction:column;gap:10px;backdrop-filter:blur(6px);box-shadow:0 18px 40px rgba(0,0,0,.45)}
+.ph{display:flex;justify-content:space-between;align-items:baseline}
+.ph label{font-weight:600;font-size:14px}
+.count{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:84px;max-height:30vh;background:var(--ink);color:var(--text);
+  border:1px solid var(--line);border-radius:10px;padding:10px;font:14px/1.5 var(--f-body)}
+textarea:disabled{opacity:.55}
+.hint{margin:-4px 0 0;font-size:12px;color:var(--muted)}
+.opts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.lbl{font-size:13px;color:var(--muted);letter-spacing:.04em}
+.seg{display:inline-flex;background:var(--ink);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{background:none;border:0;border-radius:999px;padding:6px 12px;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--deck-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--cyan)}
+.num{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.num input{width:56px;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:500 13px var(--f-mono)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.row button{background:var(--deck-2);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:14px}
+.row button:hover{border-color:var(--muted)}
+.row .primary{margin-left:auto;background:var(--cyan);color:#04121a;border-color:var(--cyan);font-weight:600;padding-inline:22px}
+.row .primary:hover{filter:brightness(1.08)}
+.msg{margin:0;font-size:13px;color:var(--amber)}
+.panel.mini .full{display:none}
+.panel:not(.mini) #btnToggle{display:none}
+
+#board{position:fixed;top:calc(16px + env(safe-area-inset-top,0px));right:16px;width:200px;max-height:58vh;display:flex;flex-direction:column;
+  background:color-mix(in srgb,var(--deck) 88%,transparent);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.bh{display:flex;justify-content:space-between;align-items:baseline;padding:10px 12px 4px;font-size:12px;color:var(--muted)}
+.bh b{font-family:var(--f-mono);font-weight:500;color:var(--text);font-size:14px;font-variant-numeric:tabular-nums}
+.goal{margin:0;padding:0 12px 8px;font-size:12px;color:var(--amber);border-bottom:1px solid var(--line)}
+#rankList{list-style:none;margin:0;padding:6px 6px 8px;overflow:auto}
+#rankList li{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:7px;font-size:13px;min-width:0}
+#rankList .pos{width:22px;text-align:right;font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+#rankList .dot{width:10px;height:10px;border-radius:50%;flex:none}
+#rankList .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+#rankList li.done .nm{color:var(--text)}
+#rankList li.done .pos{color:var(--cyan)}
+#rankList li.win{background:color-mix(in srgb,var(--amber) 18%,transparent)}
+#rankList li.win .nm{color:var(--amber);font-weight:600}
+.tag{font-size:11px;background:var(--amber);color:#1c1400;border-radius:5px;padding:1px 6px;font-weight:600}
+
+#mini{position:fixed;top:calc(16px + env(safe-area-inset-top,0px));left:16px;width:64px;height:320px;
+  border:1px solid var(--line);border-radius:8px;background:var(--deck)}
+
+#win{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));pointer-events:none}
+.card{pointer-events:auto;background:color-mix(in srgb,var(--deck) 94%,transparent);border:1px solid var(--amber);border-radius:16px;padding:18px 20px 16px;text-align:center;
+  width:min(280px,calc(100vw - 32px));box-sizing:border-box;box-shadow:0 18px 44px rgba(0,0,0,.55);animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{from{transform:translateY(24px) scale(.9);opacity:.4}to{transform:none;opacity:1}}
+.ball{width:52px;height:52px;border-radius:50%;margin:0 auto 10px;box-shadow:0 0 24px currentColor}
+.eyebrow{margin:0;font-size:12px;color:var(--muted);letter-spacing:.04em}
+#winName{margin:4px 0 14px;font:400 clamp(28px,7vw,40px)/1.1 var(--f-display);text-wrap:balance;word-break:keep-all}
+.card .row button{padding:7px 12px;font-size:13px}
+.card .row{justify-content:center}
+.card .row .primary{margin-left:0}
+
+@media (max-width:640px){
+  #board{width:150px;max-height:40vh}
+  #mini{width:40px;height:200px}
+  .panel{left:16px;right:16px;width:auto}
+  #win{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+}
+@media (prefers-reduced-motion:reduce){.card{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<canvas id="mini" aria-label="코스 전체 지도"></canvas>
+
+<aside id="board" aria-live="polite">
+  <div class="bh"><span>도착</span><b id="arrived">0 / 0</b></div>
+  <p class="goal" id="goal"></p>
+  <ol id="rankList"></ol>
+</aside>
+
+<section id="panel" class="panel">
+  <div class="ph full"><label for="names">참가자 이름</label><span id="count" class="count">0명</span></div>
+  <textarea id="names" class="full" spellcheck="false">김민준, 이서연, 박도윤, 최하은, 정시우, 강지아, 윤예준, 임수아</textarea>
+  <p class="hint full" id="hint">쉼표나 줄바꿈으로 구분 · 최대 80명 · 위 이름은 예시예요</p>
+  <div class="opts full">
+    <span class="lbl">당첨</span>
+    <div class="seg" role="radiogroup" aria-label="당첨 기준">
+      <button id="mFirst" class="on" role="radio" aria-checked="true">먼저 도착</button>
+      <button id="mLast" role="radio" aria-checked="false">늦게 도착</button>
+    </div>
+    <label class="num" for="rankN"><input id="rankN" type="number" min="1" value="1">번째</label>
+  </div>
+  <div class="row">
+    <button id="btnShuffle" class="full">섞기</button>
+    <button id="btnReset">처음으로</button>
+    <button id="btnToggle">설정 열기</button>
+    <button id="btnStart" class="primary">시작</button>
+  </div>
+  <p id="msg" class="msg" hidden></p>
+</section>
+
+<div id="win" hidden>
+  <div class="card" role="dialog" aria-labelledby="winName">
+    <div class="ball" id="winBall"></div>
+    <p class="eyebrow" id="winSub"></p>
+    <h2 id="winName"></h2>
+    <div class="row">
+      <button id="btnAgain" class="primary">다시 굴리기</button>
+      <button id="btnClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+/* ---------- 코스 ---------- */
+const W = 600, H = 4800, FINISH = 4680, R = 11, G = 980;
+const segs = [], pegs = [], spinners = [], fills = [], rings = [];
+const line = (ax, ay, bx, by, o = {}) => segs.push({ ax, ay, bx, by, e: o.e ?? 0.45, c: o.c || 'wall' });
+const poly = (pts, o) => { for (let i = 0; i < pts.length - 1; i++) line(pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1], o); };
+const shape = (pts, o) => { poly([...pts, pts[0]], o); fills.push({ pts, c: o.c }); };
+const diamond = (cx, cy, h) => shape([[cx, cy-h], [cx+h, cy], [cx, cy+h], [cx-h, cy]], { c: 'cyan', e: 0.5 });
+const spinner = (cx, cy, len, w, arms = 1) => { spinners.push({ cx, cy, len, w, arms, ang: 0 }); pegs.push({ x: cx, y: cy, r: 7, e: 0.4, c: 'hub' }); };
+
+// 외벽
+poly([[80, 0], [80, 4300], [270, 4560], [270, H + 100]]);
+poly([[520, 0], [520, 4300], [330, 4560], [330, H + 100]]);
+line(80, 0, 520, 0);
+// A. 핀 밭
+for (let r = 0; r < 9; r++) {
+  const y = 260 + r * 45, x0 = r % 2 ? 155 : 130;
+  for (let x = x0; x <= 490; x += 50) pegs.push({ x, y, r: 6, e: 0.5, c: 'cyan' });
+}
+// B. 갈매기 경사로
+line(80, 720, 220, 800, { c: 'cyan' }); line(520, 720, 380, 800, { c: 'cyan' });
+poly([[230, 870], [300, 825], [370, 870]], { c: 'cyan' });
+line(80, 920, 200, 980, { c: 'cyan' }); line(520, 920, 400, 980, { c: 'cyan' });
+// C. 회전 막대
+spinner(200, 1080, 170, 1.9);
+spinner(400, 1240, 170, -1.9);
+spinner(300, 1410, 140, 2.4, 2);
+// D. 다이아몬드
+diamond(210, 1600, 70);
+diamond(390, 1730, 70);
+// E. 지그재그 선반
+line(80, 1840, 360, 1895); line(520, 1950, 240, 2005); line(80, 2060, 360, 2115);
+// F. 튕김 범퍼
+[[160, 2200], [300, 2200], [440, 2200], [230, 2290], [370, 2290], [160, 2380], [300, 2380], [440, 2380]]
+  .forEach(([x, y]) => pegs.push({ x, y, r: 16, e: 1.1, kick: 380, c: 'pink', flash: 0 }));
+// G. 회전 막대
+spinner(300, 2470, 160, 1.2);
+// H. 두 번째 핀 밭
+for (let r = 0; r < 8; r++) {
+  const y = 2580 + r * 45, x0 = r % 2 ? 130 : 155;
+  for (let x = x0; x <= 490; x += 50) pegs.push({ x, y, r: 6, e: 0.5, c: 'cyan' });
+}
+// I. 맞물려 도는 풍차 두 개 (가운데 틈 50px)
+spinner(200, 3080, 150, 3, 2);
+spinner(400, 3080, 150, -3, 2);
+// J. 다이아몬드 세 개 + 지그재그
+diamond(170, 3300, 50); diamond(300, 3300, 50); diamond(430, 3300, 50);
+line(520, 3460, 240, 3515); line(80, 3570, 360, 3625); line(520, 3680, 240, 3735);
+// K. 두 번째 범퍼 구간
+[[160, 3840], [300, 3840], [440, 3840], [230, 3930], [370, 3930], [160, 4020], [300, 4020], [440, 4020]]
+  .forEach(([x, y]) => pegs.push({ x, y, r: 16, e: 1.1, kick: 380, c: 'pink', flash: 0 }));
+// L. 결승 직전 회전 막대
+spinner(300, 4170, 180, -1.4);
+// M. 결승 깔때기: 닿으면 위로 튕겨 올리고 사라지는 노란 링
+rings.push({ x: 200, y: 4420, r: 30 }, { x: 400, y: 4420, r: 30 }, { x: 300, y: 4520, r: 26 }, { x: 300, y: 4620, r: 22 });
+const laneShape = [[80, 0], [520, 0], [520, 4300], [330, 4560], [330, H], [270, H], [270, 4560], [80, 4300]];
+
+/* ---------- 상태 ---------- */
+const $ = id => document.getElementById(id);
+const cv = $('stage'), ctx = cv.getContext('2d'), mm = $('mini'), mctx = mm.getContext('2d');
+let DPR = 1, CW = 0, CH = 0;
+let marbles = [], finished = [], state = 'ready', mode = 'first', winner = null, timeScale = 1;
+const cam = { x: W / 2, y: -40 };
+let confetti = [], miniBg = null, arrivals = [], boost = 1;
+const traySlot = rank => ({ x: 362 + ((rank - 1) % 6) * 28, y: FINISH + 34 + Math.floor((rank - 1) / 6) * 28 });
+
+const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const shuffleArr = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const parseNames = () => $('names').value.split(/[,\n]/).map(s => s.trim()).filter(Boolean).slice(0, 80);
+const colorFor = (i, n) => `hsl(${(i * 360 / n + 8) % 360} 85% 63%)`;
+const kVal = () => Math.max(1, Math.min(marbles.length || 1, parseInt($('rankN').value, 10) || 1));
+const targetPos = () => mode === 'first' ? kVal() : marbles.length - kVal() + 1;
+
+function setup(randomSlots) {
+  const names = parseNames();
+  marbles = names.map((name, i) => ({ name, color: colorFor(i, names.length), x: 0, y: 0, vx: 0, vy: 0, done: false, rank: 0, chkT: 0, chkY: 0, trail: [] }));
+  let order = marbles.map((_, i) => i);
+  if (randomSlots) shuffleArr(order);
+  const cols = Math.min(13, Math.max(1, marbles.length));
+  order.forEach((mi, slot) => {
+    const m = marbles[mi], row = Math.floor(slot / cols), col = slot % cols;
+    const inRow = Math.min(cols, marbles.length - row * cols);
+    m.x = 300 - (inRow - 1) * 15 + col * 30; m.y = 24 + row * 26; m.chkY = m.y;
+  });
+  finished = []; winner = null; timeScale = 1; arrivals = []; boost = 1;
+  spinners.forEach(s => s.ang = 0);
+  rings.forEach(rg => { rg.used = false; rg.pop = 0; });  $('count').textContent = `${marbles.length}명`;
+  $('rankN').max = Math.max(1, marbles.length);
+  updateGoal(); updateRank();
+}
+
+function updateGoal() {
+  $('goal').textContent = `${mode === 'first' ? '먼저' : '늦게'} 도착한 ${kVal()}번째가 당첨`;
+}
+
+/* ---------- 물리 ---------- */
+function segHit(m, ax, ay, bx, by, e, sp) {
+  const abx = bx - ax, aby = by - ay, L2 = abx * abx + aby * aby;
+  let t = ((m.x - ax) * abx + (m.y - ay) * aby) / L2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const px = ax + abx * t, py = ay + aby * t, dx = m.x - px, dy = m.y - py, d2 = dx * dx + dy * dy;
+  if (d2 >= R * R || d2 < 1e-10) return;
+  const d = Math.sqrt(d2), nx = dx / d, ny = dy / d;
+  m.x += nx * (R - d); m.y += ny * (R - d);
+  let svx = 0, svy = 0;
+  if (sp) { svx = -sp.w * (py - sp.cy); svy = sp.w * (px - sp.cx); }
+  let rx = m.vx - svx, ry = m.vy - svy;
+  const vn = rx * nx + ry * ny;
+  if (vn < 0) {
+    rx -= (1 + e) * vn * nx; ry -= (1 + e) * vn * ny;
+    const vt = -rx * ny + ry * nx; rx += ny * vt * 0.002; ry -= nx * vt * 0.002;
+  }
+  m.vx = rx + svx; m.vy = ry + svy;
+}
+
+function physics(step) {
+  const sub = 4, dt = step / sub;
+  for (let s = 0; s < sub; s++) {
+    for (const sp of spinners) sp.ang += sp.w * dt;
+    for (const m of marbles) {
+      if (m.done) continue;
+      m.vy += G * dt;
+      const v2 = m.vx * m.vx + m.vy * m.vy;
+      if (v2 > 1600 * 1600) { const k = 1600 / Math.sqrt(v2); m.vx *= k; m.vy *= k; }
+      m.x += m.vx * dt; m.y += m.vy * dt;
+      for (const g of segs) {
+        if (Math.min(g.ay, g.by) - R > m.y || Math.max(g.ay, g.by) + R < m.y) continue;
+        segHit(m, g.ax, g.ay, g.bx, g.by, g.e, null);
+      }
+      for (const sp of spinners) {
+        const h = sp.len / 2 + R;
+        if (Math.abs(m.y - sp.cy) > h || Math.abs(m.x - sp.cx) > h) continue;
+        for (let k = 0; k < sp.arms; k++) {
+          const a = sp.ang + k * Math.PI / sp.arms, c = Math.cos(a) * sp.len / 2, d = Math.sin(a) * sp.len / 2;
+          segHit(m, sp.cx - c, sp.cy - d, sp.cx + c, sp.cy + d, 0.3, sp);
+        }
+      }
+      for (const p of pegs) {
+        const dx = m.x - p.x, dy = m.y - p.y, rr = R + p.r;
+        if (dx > rr || dx < -rr || dy > rr || dy < -rr) continue;
+        const d = Math.hypot(dx, dy);
+        if (d >= rr || d < 1e-6) continue;
+        const nx = dx / d, ny = dy / d;
+        m.x += nx * (rr - d); m.y += ny * (rr - d);
+        const vn = m.vx * nx + m.vy * ny;
+        if (vn < 0) {
+          m.vx -= (1 + p.e) * vn * nx; m.vy -= (1 + p.e) * vn * ny;
+          if (p.kick) {
+            const out = m.vx * nx + m.vy * ny;
+            if (out < p.kick) { m.vx += nx * (p.kick - out); m.vy += ny * (p.kick - out); }
+            p.flash = 1;
+          }
+        }
+      }
+      for (const rg of rings) {
+        if (rg.used) continue;
+        const dx = m.x - rg.x, dy = m.y - rg.y;
+        if (dx * dx + dy * dy < (rg.r + R) * (rg.r + R)) {
+          rg.used = true; rg.pop = 1;
+          m.vy = -(1100 + Math.random() * 300); m.vx = (Math.random() - 0.5) * 500;
+          m.chkT = 0; m.chkY = -1e9;
+        }
+      }
+      if (m.x < R) m.x = R; if (m.x > W - R) m.x = W - R;
+    }
+    for (let i = 0; i < marbles.length; i++) {
+      const a = marbles[i]; if (a.done) continue;
+      for (let j = i + 1; j < marbles.length; j++) {
+        const b = marbles[j]; if (b.done) continue;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        if (dx > 2 * R || dx < -2 * R || dy > 2 * R || dy < -2 * R) continue;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= 4 * R * R || d2 < 1e-9) continue;
+        const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, ov = (2 * R - d) / 2;
+        a.x -= nx * ov; a.y -= ny * ov; b.x += nx * ov; b.y += ny * ov;
+        const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+        if (vn < 0) { const j2 = -1.7 * vn / 2; a.vx -= j2 * nx; a.vy -= j2 * ny; b.vx += j2 * nx; b.vy += j2 * ny; }
+      }
+    }
+    for (const m of marbles) {
+      if (m.done) continue;
+      if (m.y > FINISH) {
+        m.done = true; finished.push(m); m.rank = finished.length;
+        m.fx = m.x; m.fy = m.y; m.ft = 0;                       // 도착 트레이로 굴러가는 시작점
+        arrivals.push({ m, t: 0 });
+        onFinish(); continue;
+      }
+    }
+  }
+}
+
+function onFinish() {
+  if (!winner && finished.length >= targetPos()) {
+    winner = finished[targetPos() - 1];
+    setTimeout(showWinner, 500);
+  }
+  if (finished.length === marbles.length) state = 'done';
+}
+
+/* ---------- 화면 ---------- */
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1); CW = innerWidth; CH = innerHeight;
+  cv.width = CW * DPR; cv.height = CH * DPR;
+  const r = mm.getBoundingClientRect();
+  mm.width = r.width * DPR; mm.height = r.height * DPR;
+  miniBg = null;
+}
+const zoom = () => Math.min(CW / (W + 80), CH / 620) * boost;
+
+function candidate() {
+  const run = marbles.filter(m => !m.done).sort((a, b) => b.y - a.y);
+  if (!run.length) return null;
+  const idx = Math.max(0, Math.min(run.length - 1, targetPos() - finished.length - 1));
+  return { c: run[idx], run };
+}
+
+function updateCamera(dt) {
+  const z = zoom(), vh = CH / z, vw = CW / z;
+  let tx = W / 2, ty = -40;
+  if (state !== 'ready') {
+    const cd = candidate();   // 당첨 후에는 남은 구슬 중 선두를 따라감
+    const t = cd ? cd.c : { x: 300, y: FINISH };
+    ty = t.y - vh * 0.42; if (vw < W) tx = t.x;
+    // 결승선 근처 접전이면 슬로모션
+    let slow = false;
+    if (cd && !winner && cd.c.y > FINISH - 170) slow = cd.run.some(m => m !== cd.c && Math.abs(m.y - cd.c.y) < 45);
+    // 상위 5위가 정해질 때까지는 결승선 근처 접전이면 슬로모션
+    if (cd && finished.length < 5) {
+      const near = cd.run.filter(m => m.y > FINISH - 170);
+      for (let i = 0; i < near.length - 1 && !slow; i++) if (near[i].y - near[i + 1].y < 45) slow = true;
+    }
+    // 결승 구간 클로즈업: 5위가 정해질 때까지 결승선 260px 안에 구슬이 있으면 확대 + 슬로모션, 결승선 고정
+    const zone = cd && finished.length < 5 && cd.run[0].y > FINISH - 260;
+    if (zone) { slow = true; ty = FINISH - vh * 0.6; tx = 300; }
+    boost += ((zone ? 1.6 : 1) - boost) * Math.min(1, dt * 3);
+    timeScale += ((slow ? (zone ? 0.3 : 0.35) : 1) - timeScale) * Math.min(1, dt * 5);
+  }
+  ty = Math.max(-60, Math.min(H - vh + 40, ty));
+  const k = Math.min(1, dt * 4);
+  cam.y += (ty - cam.y) * k;
+  cam.x = vw >= W ? W / 2 : cam.x + (Math.max(vw / 2, Math.min(W - vw / 2, tx)) - cam.x) * k;
+}
+
+const COL = { wall: '#d6e6ff', cyan: '#40efe3', amber: '#ffc93c', pink: '#ff5aa5' };
+
+function draw(dt) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#06080f'; ctx.fillRect(0, 0, CW, CH);
+  const z = zoom();
+  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (CW / 2 - cam.x * z), DPR * (-cam.y * z));
+  const top = cam.y - 40, bot = cam.y + CH / z + 40;
+
+  ctx.beginPath(); laneShape.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+  ctx.fillStyle = '#0d1322'; ctx.fill();
+
+  // 거리 눈금
+  ctx.fillStyle = '#3a4767'; ctx.font = `500 ${11 / z * 1.2}px "JetBrains Mono", monospace`; ctx.textAlign = 'right';
+  for (let y = 500; y < FINISH; y += 500) if (y > top && y < bot) ctx.fillText(`${y / 10}m`, 70, y + 4);
+
+  // 채움 도형
+  ctx.shadowBlur = 18;
+  for (const f of fills) {
+    if (f.pts[0][1] > bot || f.pts[2][1] < top) continue;
+    ctx.beginPath(); f.pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+    ctx.shadowColor = COL[f.c]; ctx.fillStyle = 'rgba(64,239,227,.82)'; ctx.fill();
+  }
+  // 선
+  ctx.lineCap = 'round'; ctx.lineWidth = 4;
+  for (const g of segs) {
+    if (Math.min(g.ay, g.by) > bot || Math.max(g.ay, g.by) < top) continue;
+    ctx.strokeStyle = ctx.shadowColor = COL[g.c]; ctx.shadowBlur = g.c === 'wall' ? 8 : 14;
+    ctx.beginPath(); ctx.moveTo(g.ax, g.ay); ctx.lineTo(g.bx, g.by); ctx.stroke();
+  }
+  // 회전 막대
+  ctx.lineWidth = 8; ctx.strokeStyle = ctx.shadowColor = COL.amber; ctx.shadowBlur = 16;
+  for (const sp of spinners) {
+    if (sp.cy - sp.len > bot || sp.cy + sp.len < top) continue;
+    for (let k = 0; k < sp.arms; k++) {
+      const a = sp.ang + k * Math.PI / sp.arms, c = Math.cos(a) * sp.len / 2, d = Math.sin(a) * sp.len / 2;
+      ctx.beginPath(); ctx.moveTo(sp.cx - c, sp.cy - d); ctx.lineTo(sp.cx + c, sp.cy + d); ctx.stroke();
+    }
+  }
+  // 핀, 범퍼, 링
+  for (const p of pegs) {
+    if (p.y > bot || p.y < top) continue;
+    if (p.c === 'cyan') { ctx.shadowBlur = 0; ctx.fillStyle = COL.cyan; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); continue; }
+    if (p.c === 'hub') { ctx.shadowBlur = 0; ctx.fillStyle = '#06080f'; ctx.strokeStyle = COL.amber; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); ctx.stroke(); continue; }
+    const col = COL[p.c]; ctx.strokeStyle = ctx.shadowColor = col; ctx.lineWidth = 4;
+    ctx.shadowBlur = 14 + (p.flash || 0) * 30;
+    if (p.flash) { ctx.fillStyle = `rgba(255,90,165,${p.flash * 0.6})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); p.flash = Math.max(0, p.flash - dt * 4); }
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r - 2, 0, 7); ctx.stroke();
+  }
+  // 노란 링 (한 번 닿으면 퍼지며 사라짐)
+  for (const rg of rings) {
+    if (rg.y - rg.r > bot || rg.y + rg.r < top) continue;
+    ctx.strokeStyle = ctx.shadowColor = COL.amber;
+    if (!rg.used) { ctx.shadowBlur = 18; ctx.lineWidth = 6; ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(rg.x, rg.y, rg.r, 0, 7); ctx.stroke(); }
+    else if (rg.pop > 0) {
+      ctx.shadowBlur = 24; ctx.lineWidth = 6 * rg.pop; ctx.globalAlpha = rg.pop;
+      ctx.beginPath(); ctx.arc(rg.x, rg.y, rg.r * (2 - rg.pop), 0, 7); ctx.stroke();
+      rg.pop = Math.max(0, rg.pop - dt * 2.5);
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.shadowBlur = 0;
+  // 결승선
+  if (FINISH > top && FINISH < bot) {
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 2; j++) {
+      ctx.fillStyle = (i + j) % 2 ? '#e8ecf6' : '#06080f'; ctx.fillRect(270 + i * 10, FINISH - 10 + j * 10, 10, 10);
+    }
+    ctx.fillStyle = COL.amber; ctx.font = `400 ${16 / z * 1.3}px "Black Han Sans", sans-serif`; ctx.textAlign = 'left';
+    ctx.fillText('FINISH', 340, FINISH + 6);
+  }
+  // 도착 트레이: 통과한 구슬이 등수 번호를 달고 결승선 옆에 줄 섬
+  for (const m of finished) {
+    const s = traySlot(m.rank);
+    m.ft = Math.min(1, (m.ft || 0) + dt * 1.6);
+    const e = 1 - Math.pow(1 - m.ft, 3);
+    const x = m.fx + (s.x - m.fx) * e, y = m.fy + (s.y - m.fy) * e - Math.sin(e * Math.PI) * 30;
+    if (y < top - 40 || y > bot + 40) continue;
+    if (m === winner) { ctx.strokeStyle = COL.amber; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, R + 4, 0, 7); ctx.stroke(); }
+    ctx.fillStyle = m.color; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
+    ctx.fillStyle = '#06080f'; ctx.textAlign = 'center'; ctx.font = `500 ${m.rank > 9 ? 10 : 12}px "JetBrains Mono", monospace`;
+    ctx.fillText(m.rank, x, y + 4);
+  }
+  // 구슬
+  const cd = state === 'running' && !winner ? candidate() : null;
+  const fs = Math.max(11, 13 / z * 1.4);
+  for (const m of marbles) {
+    if (m.done) continue;
+    if (state !== 'ready') { m.trail.push(m.x, m.y); if (m.trail.length > 16) m.trail.splice(0, 2); }
+    if (m.y < top - 40 || m.y > bot + 40) continue;
+    if (m.trail.length > 2) {
+      ctx.strokeStyle = m.color; ctx.globalAlpha = 0.25; ctx.lineWidth = R * 1.2;
+      ctx.beginPath(); ctx.moveTo(m.trail[0], m.trail[1]);
+      for (let i = 2; i < m.trail.length; i += 2) ctx.lineTo(m.trail[i], m.trail[i + 1]);
+      ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    if (cd && cd.c === m) { ctx.strokeStyle = COL.amber; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(m.x, m.y, R + 6, 0, 7); ctx.stroke(); }
+    const gr = ctx.createRadialGradient(m.x - 4, m.y - 4, 1, m.x, m.y, R);
+    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.35, m.color); gr.addColorStop(1, m.color);
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(m.x, m.y, R, 0, 7); ctx.fill();
+  }
+  ctx.font = `600 ${fs}px "IBM Plex Sans KR", sans-serif`; ctx.textAlign = 'center';
+  ctx.lineWidth = 3 / z * 1.2; ctx.strokeStyle = '#06080f'; ctx.lineJoin = 'round';
+  for (const m of marbles) {
+    if (m.done || m.y < top - 40 || m.y > bot + 40) continue;
+    const label = m.name.length > 6 ? m.name.slice(0, 6) + '…' : m.name;
+    ctx.strokeText(label, m.x, m.y + R + fs); ctx.fillStyle = m.color; ctx.fillText(label, m.x, m.y + R + fs);
+  }
+  // 꽃가루 (화면 좌표)
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // 도착 알림: 화면 위쪽에 "1위 이름"이 떴다가 사라짐 (최근 3개)
+  arrivals.forEach(a => a.t += dt);
+  arrivals = arrivals.filter(a => a.t < 2.6);
+  arrivals.slice(-3).forEach((a, i, arr) => {
+    const k = arr.length - 1 - i;                       // 0 = 가장 최근
+    const alpha = Math.min(1, a.t * 6, (2.6 - a.t) * 2);
+    const size = k === 0 ? 34 : 24;
+    const y = 70 + k * 40 + (k === 0 ? 0 : 6);
+    ctx.globalAlpha = alpha; ctx.textAlign = 'center';
+    ctx.font = `400 ${size}px "Black Han Sans", sans-serif`;
+    const text = `${a.m.rank}위  ${a.m.name}`;
+    ctx.lineWidth = 6; ctx.strokeStyle = '#06080f'; ctx.lineJoin = 'round';
+    ctx.strokeText(text, CW / 2, y); ctx.fillStyle = a.m.color; ctx.fillText(text, CW / 2, y);
+  });
+  ctx.globalAlpha = 1;
+  for (const c of confetti) {
+    c.vy += 400 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.r += c.vr * dt; c.life -= dt;
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.r); ctx.fillStyle = c.c; ctx.fillRect(-c.s / 2, -c.s / 4, c.s, c.s / 2); ctx.restore();
+  }
+  confetti = confetti.filter(c => c.life > 0 && c.y < CH + 40);
+}
+
+function drawMini() {
+  const w = mm.width, h = mm.height; if (!w || !h) return;
+  const s = Math.min(h / H, w / W);
+  const ox = (w - W * s) / 2;
+  if (!miniBg) {
+    miniBg = document.createElement('canvas'); miniBg.width = w; miniBg.height = h;
+    const g = miniBg.getContext('2d'); g.translate(ox, 0); g.scale(s, s);
+    g.beginPath(); laneShape.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fillStyle = '#0d1322'; g.fill();
+    g.lineWidth = 2 / s * DPR * 0.5;
+    for (const sg of segs) { g.strokeStyle = COL[sg.c]; g.beginPath(); g.moveTo(sg.ax, sg.ay); g.lineTo(sg.bx, sg.by); g.stroke(); }
+    for (const f of fills) { g.beginPath(); f.pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fillStyle = COL.cyan; g.fill(); }
+    for (const p of pegs) { g.fillStyle = COL[p.c] || COL.amber; g.beginPath(); g.arc(p.x, p.y, Math.max(p.r, 8), 0, 7); g.fill(); }
+    for (const sp of spinners) { g.fillStyle = COL.amber; g.fillRect(sp.cx - sp.len / 2, sp.cy - 6, sp.len, 12); }
+    g.fillStyle = COL.amber; g.fillRect(270, FINISH - 10, 60, 20);
+  }
+  mctx.setTransform(1, 0, 0, 1, 0, 0); mctx.clearRect(0, 0, w, h); mctx.drawImage(miniBg, 0, 0);
+  mctx.setTransform(s, 0, 0, s, ox, 0);
+  mctx.strokeStyle = COL.amber; mctx.lineWidth = 10;
+  for (const rg of rings) if (!rg.used) { mctx.beginPath(); mctx.arc(rg.x, rg.y, rg.r, 0, 7); mctx.stroke(); }  for (const m of marbles) if (!m.done) { mctx.fillStyle = m.color; mctx.beginPath(); mctx.arc(m.x, m.y, 16, 0, 7); mctx.fill(); }
+  const z = zoom();
+  mctx.strokeStyle = 'rgba(232,236,246,.7)'; mctx.lineWidth = 2 * DPR / s;
+  mctx.strokeRect(Math.max(0, cam.x - CW / z / 2), cam.y, Math.min(W, CW / z), CH / z);
+}
+
+function updateRank() {
+  $('arrived').textContent = `${finished.length} / ${marbles.length}`;
+  const list = state === 'ready' ? marbles : [...finished, ...marbles.filter(m => !m.done).sort((a, b) => b.y - a.y)];
+  $('rankList').innerHTML = list.map((m, i) =>
+    `<li class="${m === winner ? 'win ' : ''}${m.done ? 'done' : ''}"><span class="pos">${state === 'ready' ? '·' : i + 1}</span>` +
+    `<span class="dot" style="background:${m.color}"></span><span class="nm">${esc(m.name)}</span>${m === winner ? '<span class="tag">당첨</span>' : ''}</li>`
+  ).join('');
+}
+
+function burst() {
+  const cols = ['#40efe3', '#ffc93c', '#ff5aa5', '#e8ecf6', winner.color];
+  for (let i = 0; i < 160; i++) confetti.push({
+    x: CW - 170 + (Math.random() - 0.5) * 80, y: CH - 200, vx: -Math.random() * 700 + 150, vy: -Math.random() * 700 - 200,
+    r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, s: 8 + Math.random() * 8, c: cols[i % cols.length], life: 4
+  });
+}
+
+function showWinner() {
+  if (!winner) return;
+  $('winName').textContent = winner.name;
+  $('winSub').textContent = `${mode === 'first' ? '먼저' : '늦게'} 도착 ${kVal()}번째 · 전체 ${winner.rank}번째 도착`;
+  $('winBall').style.background = winner.color; $('winBall').style.color = winner.color;
+  $('win').hidden = false;
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) burst();
+  updateRank();
+}
+
+/* ---------- 조작 ---------- */
+function setPanelMini(on) { $('panel').classList.toggle('mini', on); $('btnToggle').textContent = '설정 열기'; }
+function say(t) { $('msg').textContent = t; $('msg').hidden = !t; }
+
+function start() {
+  if (parseNames().length < 2) { say('이름을 2개 이상 입력해 주세요.'); setPanelMini(false); return; }
+  say(''); $('win').hidden = true;
+  setup(true);
+  for (const m of marbles) { m.x += (Math.random() - 0.5) * 6; m.vx = (Math.random() - 0.5) * 80; }
+  state = 'running'; $('names').disabled = true; setPanelMini(true);
+}
+function reset() {
+  state = 'ready'; $('win').hidden = true; $('names').disabled = false; confetti = []; say('');
+  setup(false); setPanelMini(false);
+}
+function setMode(m) {
+  mode = m;
+  $('mFirst').classList.toggle('on', m === 'first'); $('mFirst').setAttribute('aria-checked', m === 'first');
+  $('mLast').classList.toggle('on', m === 'last'); $('mLast').setAttribute('aria-checked', m === 'last');
+  updateGoal();
+}
+
+/* 이름 자동 저장 (이 브라우저에만 저장됨) */
+const NAMES_KEY = 'marble-roulette-names';
+const SAVED_HINT = '쉼표나 줄바꿈으로 구분 · 최대 80명 · 이 브라우저에 자동 저장돼요';
+const saveNames = () => { try { localStorage.setItem(NAMES_KEY, $('names').value); $('hint').textContent = SAVED_HINT; } catch (e) {} };
+try { const saved = localStorage.getItem(NAMES_KEY); if (saved !== null) { $('names').value = saved; $('hint').textContent = SAVED_HINT; } } catch (e) {}
+
+$('names').addEventListener('input', () => { saveNames(); if (state === 'ready') setup(false); });
+$('btnStart').onclick = start;
+$('btnAgain').onclick = start;
+$('btnReset').onclick = reset;
+$('btnClose').onclick = () => { $('win').hidden = true; };
+$('btnToggle').onclick = () => setPanelMini(false);
+$('btnShuffle').onclick = () => {
+  if (state !== 'ready') return;
+  $('names').value = shuffleArr(parseNames()).join(', '); saveNames(); setup(false);
+};
+$('mFirst').onclick = () => { if (state === 'ready') setMode('first'); };
+$('mLast').onclick = () => { if (state === 'ready') setMode('last'); };
+$('rankN').addEventListener('input', () => { if (state === 'ready') updateGoal(); });
+$('rankN').addEventListener('change', () => { $('rankN').value = kVal(); updateGoal(); });
+addEventListener('resize', resize);
+
+/* ---------- 루프 ---------- */
+let last = performance.now(), acc = 0, lastUI = 0;
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  if (state === 'running' || state === 'done') {
+    acc += dt * timeScale;
+    const step = 1 / 120; let n = 0;
+    while (acc >= step && n < 12) { physics(step); acc -= step; n++; }
+  }
+  updateCamera(dt); draw(dt); drawMini();
+  if (t - lastUI > 150 && state !== 'ready') { updateRank(); lastUI = t; }
+  requestAnimationFrame(frame);
+}
+resize(); setup(false);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
