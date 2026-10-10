@@ -49,26 +49,26 @@ textarea:disabled{opacity:.55}
 .panel.mini .full{display:none}
 .panel:not(.mini) #btnToggle{display:none}
 
-#board{position:fixed;top:calc(16px + env(safe-area-inset-top,0px));right:16px;width:200px;max-height:58vh;display:flex;flex-direction:column;
-  background:color-mix(in srgb,var(--deck) 88%,transparent);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.bh{display:flex;justify-content:space-between;align-items:baseline;padding:10px 12px 4px;font-size:12px;color:var(--muted)}
-.bh b{font-family:var(--f-mono);font-weight:500;color:var(--text);font-size:14px;font-variant-numeric:tabular-nums}
-.goal{margin:0;padding:0 12px 8px;font-size:12px;color:var(--amber);border-bottom:1px solid var(--line)}
-#rankList{list-style:none;margin:0;padding:6px 6px 8px;overflow:auto}
-#rankList li{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:7px;font-size:13px;min-width:0}
-#rankList .pos{width:22px;text-align:right;font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
-#rankList .dot{width:10px;height:10px;border-radius:50%;flex:none}
+#board{position:fixed;top:calc(16px + env(safe-area-inset-top,0px));right:16px;width:min(440px,42vw);max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+  background:color-mix(in srgb,var(--deck) 88%,transparent);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.bh{display:flex;justify-content:space-between;align-items:baseline;padding:14px 18px 6px;font-size:36px;color:var(--muted)}
+.bh b{font-family:var(--f-mono);font-weight:500;color:var(--text);font-size:42px;font-variant-numeric:tabular-nums}
+.goal{margin:0;padding:0 18px 12px;font-size:36px;line-height:1.25;color:var(--amber);border-bottom:1px solid var(--line);word-break:keep-all}
+#rankList{list-style:none;margin:0;padding:8px 8px 10px;overflow:auto}
+#rankList li{display:flex;align-items:center;gap:14px;padding:6px 10px;border-radius:10px;font-size:39px;line-height:1.25;min-width:0}
+#rankList .pos{width:66px;flex:none;text-align:right;font:500 36px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+#rankList .dot{width:30px;height:30px;border-radius:50%;flex:none}
 #rankList .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 #rankList li.done .nm{color:var(--text)}
 #rankList li.done .pos{color:var(--cyan)}
 #rankList li.win{background:color-mix(in srgb,var(--amber) 18%,transparent)}
 #rankList li.win .nm{color:var(--amber);font-weight:600}
-.tag{font-size:11px;background:var(--amber);color:#1c1400;border-radius:5px;padding:1px 6px;font-weight:600}
+.tag{font-size:33px;background:var(--amber);color:#1c1400;border-radius:10px;padding:2px 12px;font-weight:600;flex:none}
 
 #mini{position:fixed;top:calc(16px + env(safe-area-inset-top,0px));left:16px;width:64px;height:320px;
   border:1px solid var(--line);border-radius:8px;background:var(--deck)}
 
-#win{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));pointer-events:none}
+#win{position:fixed;left:16px;bottom:calc(100px + env(safe-area-inset-bottom,0px));pointer-events:none}
 .card{pointer-events:auto;background:color-mix(in srgb,var(--deck) 94%,transparent);border:1px solid var(--amber);border-radius:16px;padding:18px 20px 16px;text-align:center;
   width:min(280px,calc(100vw - 32px));box-sizing:border-box;box-shadow:0 18px 44px rgba(0,0,0,.55);animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
 @keyframes pop{from{transform:translateY(24px) scale(.9);opacity:.4}to{transform:none;opacity:1}}
@@ -81,6 +81,9 @@ textarea:disabled{opacity:.55}
 
 @media (max-width:640px){
   #board{width:150px;max-height:40vh}
+  .bh{font-size:13px;padding:8px 10px 4px} .bh b{font-size:15px} .goal{font-size:12px;padding:0 10px 6px}
+  #rankList li{font-size:14px;gap:6px;padding:3px 5px} #rankList .pos{width:20px;font-size:12px} #rankList .dot{width:10px;height:10px} .tag{font-size:11px;padding:1px 5px}
+  #win{left:auto;right:16px}
   #mini{width:40px;height:200px}
   .panel{left:16px;right:16px;width:auto}
   #win{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
@@ -339,6 +342,8 @@ function resize() {
   miniBg = null;
 }
 const zoom = () => Math.min(CW / (W + 80), CH / 620) * boost;
+// 순위표에 가리지 않는 게임 영역의 너비 (넓은 화면에서는 순위표 왼쪽 공간)
+const playW = () => CW > 640 ? CW - $('board').offsetWidth - 16 : CW;
 
 function candidate() {
   const run = marbles.filter(m => !m.done).sort((a, b) => b.y - a.y);
@@ -348,7 +353,7 @@ function candidate() {
 }
 
 function updateCamera(dt) {
-  const z = zoom(), vh = CH / z, vw = CW / z;
+  const z = zoom(), vh = CH / z, vw = playW() / z;
   let tx = W / 2, ty = -40;
   if (state !== 'ready') {
     const cd = candidate();   // 당첨 후에는 남은 구슬 중 선두를 따라감
@@ -380,7 +385,8 @@ function draw(dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#06080f'; ctx.fillRect(0, 0, CW, CH);
   const z = zoom();
-  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (CW / 2 - cam.x * z), DPR * (-cam.y * z));
+  const PW = playW();
+  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (PW / 2 - cam.x * z), DPR * (-cam.y * z));
   const top = cam.y - 40, bot = cam.y + CH / z + 40;
 
   ctx.beginPath(); laneShape.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
@@ -495,7 +501,7 @@ function draw(dt) {
     ctx.font = `400 ${size}px "Black Han Sans", sans-serif`;
     const text = `${a.m.rank}위  ${a.m.name}`;
     ctx.lineWidth = 6; ctx.strokeStyle = '#06080f'; ctx.lineJoin = 'round';
-    ctx.strokeText(text, CW / 2, y); ctx.fillStyle = a.m.color; ctx.fillText(text, CW / 2, y);
+    ctx.strokeText(text, PW / 2, y); ctx.fillStyle = a.m.color; ctx.fillText(text, PW / 2, y);
   });
   ctx.globalAlpha = 1;
   for (const c of confetti) {
@@ -526,7 +532,7 @@ function drawMini() {
   for (const rg of rings) if (!rg.used) { mctx.beginPath(); mctx.arc(rg.x, rg.y, rg.r, 0, 7); mctx.stroke(); }  for (const m of marbles) if (!m.done) { mctx.fillStyle = m.color; mctx.beginPath(); mctx.arc(m.x, m.y, 16, 0, 7); mctx.fill(); }
   const z = zoom();
   mctx.strokeStyle = 'rgba(232,236,246,.7)'; mctx.lineWidth = 2 * DPR / s;
-  mctx.strokeRect(Math.max(0, cam.x - CW / z / 2), cam.y, Math.min(W, CW / z), CH / z);
+  mctx.strokeRect(Math.max(0, cam.x - playW() / z / 2), cam.y, Math.min(W, playW() / z), CH / z);
 }
 
 function updateRank() {
@@ -541,7 +547,7 @@ function updateRank() {
 function burst() {
   const cols = ['#40efe3', '#ffc93c', '#ff5aa5', '#e8ecf6', winner.color];
   for (let i = 0; i < 160; i++) confetti.push({
-    x: CW - 170 + (Math.random() - 0.5) * 80, y: CH - 200, vx: -Math.random() * 700 + 150, vy: -Math.random() * 700 - 200,
+    x: 160 + (Math.random() - 0.5) * 80, y: CH - 200, vx: -Math.random() * 700 + 150, vy: -Math.random() * 700 - 200,
     r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, s: 8 + Math.random() * 8, c: cols[i % cols.length], life: 4
   });
 }
@@ -601,11 +607,12 @@ $('rankN').addEventListener('change', () => { $('rankN').value = kVal(); updateG
 addEventListener('resize', resize);
 
 /* ---------- 루프 ---------- */
+const SPEED = 0.7;   // 전체 재생 속도 (1 = 원래 속도, 작을수록 느림)
 let last = performance.now(), acc = 0, lastUI = 0;
 function frame(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   if (state === 'running' || state === 'done') {
-    acc += dt * timeScale;
+    acc += dt * timeScale * SPEED;
     const step = 1 / 120; let n = 0;
     while (acc >= step && n < 12) { physics(step); acc -= step; n++; }
   }
